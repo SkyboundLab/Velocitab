@@ -192,7 +192,7 @@ public class PlayerTabList {
         tabPlayer.setLastServer(serverName);
 
         // Send server URLs (1.21 clients)
-        sendPlayerServerLinks(tabPlayer);
+        // sendPlayerServerLinks(tabPlayer);
 
         // Set the player as not loaded until the display name is set
         tabPlayer.getDisplayName(plugin).thenAccept(d -> {
@@ -555,7 +555,7 @@ public class PlayerTabList {
                 return;
             }
             player.setGroup(group.get());
-            this.sendPlayerServerLinks(player);
+            // this.sendPlayerServerLinks(player);
             this.updatePlayer(player, true);
             player.sendHeaderAndFooter(this);
         });
