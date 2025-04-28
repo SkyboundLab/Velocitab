@@ -207,7 +207,7 @@ public class PlayerTabList {
         tabPlayer.setLastServer(serverName);
 
         // Send server URLs (1.21 clients)
-        sendPlayerServerLinks(tabPlayer);
+        // sendPlayerServerLinks(tabPlayer);
 
         handleDisplayLoad(tabPlayer);
     }
@@ -669,7 +669,7 @@ public class PlayerTabList {
                     return;
                 }
                 player.setGroup(group.get());
-                this.sendPlayerServerLinks(player);
+                // this.sendPlayerServerLinks(player);
                 this.updatePlayer(player, true);
                 player.sendHeaderAndFooter(this);
             });
