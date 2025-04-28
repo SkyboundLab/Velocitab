@@ -96,7 +96,7 @@ public class Velocitab implements ConfigProvider, ScoreboardProvider, LoggerProv
 
     @Subscribe
     public void onProxyInitialization(@NotNull ProxyInitializeEvent event) {
-        checkCompatibility();
+        // checkCompatibility();
         loadConfigs();
         loadHooks();
         preparePlaceholderManager();
