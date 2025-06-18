@@ -35,14 +35,14 @@ import net.william278.velocitab.util.DebugSystem;
 import org.jetbrains.annotations.Blocking;
 import org.jetbrains.annotations.NotNull;
 
-import static net.william278.toilet.DumpOptions.*;
-
 import java.awt.*;
 import java.io.File;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+
+import static net.william278.toilet.DumpOptions.*;
 
 public interface DumpProvider {
 
@@ -196,7 +196,7 @@ public interface DumpProvider {
         final Map<PluginStatus.ChartKey, Integer> players = getPlugin().getTabGroupsManager().getGroups().stream()
                 .collect(Collectors.toMap(
                         g -> new PluginStatus.ChartKey(g.name(), "fa6-solid:server", COLORS.get(colorIndex.getAndIncrement() % COLORS.size())),
-                        group -> group.getTabPlayersAsList(getPlugin()).size()
+                        group -> group.getTabPlayers(getPlugin()).size()
                 ));
         return new PluginStatus.ChartStatusBlock(
                 players,
@@ -212,7 +212,7 @@ public interface DumpProvider {
                 .sorted(getGroupComparator(getPlugin()).reversed())
                 .collect(Collectors.toMap(
                         Group::name,
-                        g -> g.registeredServers(getPlugin()).stream()
+                        g -> g.registeredServers(getPlugin(), false).stream()
                                 .map(RegisteredServer::getServerInfo)
                                 .map(ServerInfo::getName)
                                 .collect(Collectors.joining(", ")),
@@ -228,8 +228,8 @@ public interface DumpProvider {
 
     default Comparator<Group> getGroupComparator(@NotNull Velocitab plugin) {
         return (g1, g2) -> {
-            final int servers1 = g1.registeredServers(plugin).size();
-            final int servers2 = g2.registeredServers(plugin).size();
+            final int servers1 = g1.registeredServers(plugin, false).size();
+            final int servers2 = g2.registeredServers(plugin, false).size();
             if (servers1 != servers2) {
                 return servers1 - servers2;
             }

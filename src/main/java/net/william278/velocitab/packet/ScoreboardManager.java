@@ -153,7 +153,7 @@ public class ScoreboardManager {
         if (teamName == null) {
             return;
         }
-        final Set<RegisteredServer> siblings = tabPlayer.getGroup().registeredServers(plugin);
+        final List<RegisteredServer> siblings = tabPlayer.getGroup().registeredServers(plugin);
         final boolean isNameTagEmpty = tabPlayer.getGroup().nametag().isEmpty() && !plugin.getSettings().isRemoveNametags();
 
         final Optional<Nametag> cachedTag = Optional.ofNullable(nametags.getOrDefault(teamName, null));
@@ -175,13 +175,14 @@ public class ScoreboardManager {
      * @param role      The new role of the player. Must not be null.
      * @param force     Whether to force the update even if the player's nametag is the same.
      */
-    public void updateRole(@NotNull TabPlayer tabPlayer, @NotNull String role, boolean force) {
+    public boolean updateRole(@NotNull TabPlayer tabPlayer, @NotNull String role, boolean force) {
         final Player player = tabPlayer.getPlayer();
         if (!player.isActive()) {
             plugin.getTabList().removeOfflinePlayer(player);
-            plugin.getLogger().info("Player {} is not active, removing from tab list", player.getUsername());
-            return;
+            DebugSystem.log(DebugSystem.DebugLevel.INFO, "Player " + player.getUsername() + " is not active, removing from tab list");
+            return false;
         }
+
         final String name = player.getUsername();
         final Nametag nametag = tabPlayer.getNametag(plugin);
         if (!createdTeams.getOrDefault(player.getUniqueId(), "").equals(role)) {
@@ -198,7 +199,8 @@ public class ScoreboardManager {
             createdTeams.put(player.getUniqueId(), role);
             final boolean a = sortedTeams.addTeam(role);
             if (!a) {
-                plugin.log(Level.ERROR, "Failed to add team " + role + " to sortedTeams");
+                DebugSystem.log(DebugSystem.DebugLevel.ERROR, "Failed to add team " + role + " to sortedTeams");
+                return false;
             }
             this.nametags.put(role, nametag);
             dispatchGroupCreatePacket(plugin, tabPlayer, role, nametag, name);
@@ -208,6 +210,8 @@ public class ScoreboardManager {
         } else {
             updatePlaceholders(tabPlayer);
         }
+
+        return true;
     }
 
     public void updatePlaceholders(@NotNull TabPlayer tabPlayer) {
@@ -231,7 +235,7 @@ public class ScoreboardManager {
         }
 
         final Player player = tabPlayer.getPlayer();
-        final Set<Player> players = tabPlayer.getGroup().getPlayers(plugin, tabPlayer);
+        final List<Player> players = tabPlayer.getGroup().getPlayers(plugin, tabPlayer);
 
         final Set<String> roles = Sets.newHashSet();
         players.forEach(p -> {
@@ -367,7 +371,7 @@ public class ScoreboardManager {
             return;
         }
 
-        final Set<Player> players = tabPlayer.getGroup().getPlayers(plugin);
+        final List<Player> players = tabPlayer.getGroup().getPlayers(plugin);
         final boolean isNameTagEmpty = tabPlayer.getGroup().nametag().isEmpty() && !plugin.getSettings().isRemoveNametags();
         players.forEach(connected -> {
             try {

@@ -83,7 +83,7 @@ public class PlaceholderManager {
 
     public void fetchPlaceholders(@NotNull Group group) {
         final List<String> texts = cachedTexts.computeIfAbsent(group, g -> g.getTextsWithPlaceholders(plugin));
-        group.getPlayersAsList(plugin).forEach(player -> fetchPlaceholders(player.getUniqueId(), texts, group));
+        group.getPlayers(plugin).forEach(player -> fetchPlaceholders(player.getUniqueId(), texts, group));
     }
 
     public void reload() {
@@ -115,60 +115,68 @@ public class PlaceholderManager {
 
         final long start = System.currentTimeMillis();
 
-        placeholders.forEach(placeholder -> replaceSingle(placeholder, plugin, tabPlayer)
-                .ifPresentOrElse(replacement -> parsed.put(placeholder, replacement),
-                        () -> plugin.getPAPIProxyBridgeHook().ifPresent(hook -> {
-                            final CompletableFuture<String> future = hook.formatPlaceholders(placeholder, player);
-                            requests.computeIfAbsent(player.getUniqueId(), u -> Sets.newConcurrentHashSet()).add(future);
-                            future.thenAccept(replacement -> {
-                                if (replacement == null || replacement.equals(placeholder)) {
-                                    return;
-                                }
+        placeholders.forEach(placeholder -> {
+            final Optional<PlaceholderResult> result = replaceSingle(placeholder, plugin, tabPlayer);
+            if (result.isPresent() && !result.get().isForBackend()) {
+                parsed.put(placeholder, result.get().postParsed());
+                return;
+            }
 
-                                if (blocked.contains(player.getUniqueId())) {
-                                    return;
-                                }
+            final String key = result.isPresent() ? result.get().preParsed() : placeholder;
+            final String toParse = result.isPresent() ? result.get().postParsed() : placeholder;
+            plugin.getPAPIProxyBridgeHook().ifPresent(hook -> {
+                final CompletableFuture<String> future = hook.formatPlaceholders(toParse, player);
+                requests.computeIfAbsent(player.getUniqueId(), u -> Sets.newConcurrentHashSet()).add(future);
+                future.thenAccept(replacement -> {
+                    if (replacement == null || replacement.equals(placeholder)) {
+                        return;
+                    }
 
-                                if (debug) {
-                                    plugin.getLogger().info("Placeholder {} replaced with  {} in {}ms", placeholder, replacement, System.currentTimeMillis() - start);
-                                }
+                    if (blocked.contains(player.getUniqueId())) {
+                        return;
+                    }
 
-                                final long diff = System.currentTimeMillis() - start;
-                                if (diff > group.placeholderUpdateRate()) {
-                                    final long increase = diff + 100;
-                                    plugin.getLogger().warn("""
+                    if (debug) {
+                        plugin.getLogger().info("Placeholder {} replaced with  {} in {}ms", placeholder, replacement, System.currentTimeMillis() - start);
+                    }
+
+                    final long diff = System.currentTimeMillis() - start;
+                    if (diff > group.placeholderUpdateRate()) {
+                        final long increase = diff + 100;
+                        plugin.getLogger().warn("""
                                                     Placeholder {} took more than group placeholder update rate of {} ms to update. This may cause a thread leak.
                                                     Please fix the issue of the plugin providing the placeholder.
                                                     If you can't fix it, increase the placeholder update rate of the group to at least {} ms.
                                                     """
-                                            , placeholder, group.placeholderUpdateRate(), increase);
-                                }
+                                , placeholder, group.placeholderUpdateRate(), increase);
+                    }
 
-                                parsed.put(placeholder, replacement);
-                                requests.get(player.getUniqueId()).remove(future);
-                            });
-                        })));
+                    requests.get(player.getUniqueId()).remove(future);
+                    parsed.put(key, replacement);
+                });
+            });
+        });
     }
 
     @NotNull
     public String applyPlaceholders(@NotNull TabPlayer player, @NotNull String text) {
         final Map<String, String> parsed = placeholders.computeIfAbsent(player.getPlayer().getUniqueId(), uuid -> Maps.newConcurrentMap());
-        return applyPlaceholderReplacements(text, player, parsed);
+        return applyPlaceholdersAndReplacements(text, player, parsed);
     }
 
     @NotNull
     public String applyPlaceholders(@NotNull TabPlayer player, @NotNull String text, @NotNull TabPlayer viewer) {
         final Map<String, String> parsed = placeholders.computeIfAbsent(player.getPlayer().getUniqueId(), uuid -> Maps.newConcurrentMap());
-        final String applied = applyPlaceholderReplacements(text, player, parsed);
+        final String applied = applyPlaceholdersAndReplacements(text, player, parsed);
 
         final Map<String, String> targetParsed = placeholders.computeIfAbsent(viewer.getPlayer().getUniqueId(), uuid -> Maps.newConcurrentMap());
-        return applyPlaceholderReplacements(applied.replace("%target_", "%"), viewer, targetParsed);
+        return applyPlaceholdersAndReplacements(applied.replace("%target_", "%"), viewer, targetParsed);
     }
 
     @NotNull
     public String applyViewerPlaceholders(@NotNull TabPlayer viewer, @NotNull String text) {
         final Map<String, String> parsed = placeholders.computeIfAbsent(viewer.getPlayer().getUniqueId(), uuid -> Maps.newConcurrentMap());
-        return applyPlaceholderReplacements(text.replace("%target_", "%"), viewer, parsed);
+        return applyPlaceholdersAndReplacements(text.replace("%target_", "%"), viewer, parsed);
     }
 
     public void clearPlaceholders(@NotNull UUID uuid) {
@@ -215,26 +223,40 @@ public class PlaceholderManager {
     }
 
     @NotNull
-    private String applyPlaceholderReplacements(@NotNull String text, @NotNull TabPlayer player,
-                                                @NotNull Map<String, String> parsed) {
-        for (final Map.Entry<String, List<PlaceholderReplacement>> entry : player.getGroup().placeholderReplacements().entrySet()) {
-            final String replaced = parsed.get(entry.getKey());
-            final String replacement = getReplacement(player.getGroup(), entry.getKey(), replaced);
-            if (replacement != null) {
-                text = text.replace(entry.getKey(), replacement);
+    private String applyPlaceholdersAndReplacements(@NotNull String text, @NotNull TabPlayer player,
+                                                    @NotNull Map<String, String> parsed) {
+        final Matcher matcher = PLACEHOLDER_PATTERN.matcher(text);
+        final StringBuilder builder = new StringBuilder(text.length());
+        int lastAppendPosition = 0;
+        final Map<String, List<PlaceholderReplacement>> groupReplacements = player.getGroup().placeholderReplacements();
+
+        while (matcher.find()) {
+            builder.append(text, lastAppendPosition, matcher.start());
+            final String placeholder = matcher.group();
+
+            String replacementToAppend = null;
+
+            if (groupReplacements.containsKey(placeholder)) {
+                final String currentValue = parsed.getOrDefault(placeholder, placeholder);
+                if (currentValue != null) {
+                    replacementToAppend = getReplacement(player.getGroup(), placeholder, currentValue);
+                }
             }
+
+            if (replacementToAppend == null) {
+                replacementToAppend = parsed.get(placeholder);
+            }
+
+            if (replacementToAppend == null) {
+                replacementToAppend = placeholder;
+            }
+
+            builder.append(replacementToAppend);
+            lastAppendPosition = matcher.end();
         }
 
-        return applyPlaceholders(text, parsed);
-    }
-
-
-    @NotNull
-    private String applyPlaceholders(@NotNull String text, @NotNull Map<String, String> replacements) {
-        for (Map.Entry<String, String> entry : replacements.entrySet()) {
-            text = text.replace(entry.getKey(), entry.getValue());
-        }
-        return text;
+        builder.append(text, lastAppendPosition, text.length());
+        return builder.toString();
     }
 
     public Optional<String> getCachedPlaceholderValue(@NotNull String text, @NotNull UUID uuid) {
@@ -245,7 +267,7 @@ public class PlaceholderManager {
         return Optional.ofNullable(placeholders.get(uuid).get(text));
     }
 
-    private Optional<String> replaceSingle(@NotNull String placeholder, @NotNull Velocitab plugin, @NotNull TabPlayer player) {
+    private Optional<PlaceholderResult> replaceSingle(@NotNull String placeholder, @NotNull Velocitab plugin, @NotNull TabPlayer player) {
         final Optional<Placeholder> optionalPlaceholder = Placeholder.byName(placeholder);
         if (optionalPlaceholder.isEmpty()) {
             //check if it's parameterised
@@ -254,7 +276,7 @@ public class PlaceholderManager {
                 if (matcher.find()) {
                     final String s = chop(matcher.group().replace("%" + placeholderType.name().toLowerCase(), "")
                             .replaceFirst("_", ""));
-                    return Optional.of(placeholderType.getReplacer().apply(s, plugin, player));
+                    return Optional.of(new PlaceholderResult(placeholder, false, placeholderType.getReplacer().apply(s, plugin, player)));
                 }
             }
 
@@ -266,7 +288,11 @@ public class PlaceholderManager {
         }
 
         final Placeholder placeholderType = optionalPlaceholder.get();
-        return Optional.of(placeholderType.getReplacer().apply(null, plugin, player));
+        if (placeholderType.isForBackend()) {
+            return Optional.of(new PlaceholderResult(placeholder, true, placeholderType.getReplacer().apply(null, plugin, player)));
+        }
+
+        return Optional.of(new PlaceholderResult(placeholder, false, placeholderType.getReplacer().apply(null, plugin, player)));
     }
 
     @NotNull
@@ -334,4 +360,7 @@ public class PlaceholderManager {
         result.append(text.substring(lastEnd));
         return result.toString();
     }
+
+    private record PlaceholderResult(String preParsed, boolean isForBackend, String postParsed) {}
+
 }
