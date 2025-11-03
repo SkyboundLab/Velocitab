@@ -206,7 +206,7 @@ public class ScoreboardManager {
             dispatchGroupCreatePacket(plugin, tabPlayer, role, nametag, name);
         } else if (force || (this.nametags.containsKey(role) && !this.nametags.get(role).equals(nametag))) {
             this.nametags.put(role, nametag);
-            dispatchGroupChangePacket(plugin, tabPlayer, role, nametag);
+            dispatchGroupChangePacket(plugin, tabPlayer, role, nametag, force);
         } else {
             updatePlaceholders(tabPlayer);
         }
@@ -223,7 +223,7 @@ public class ScoreboardManager {
         }
 
         final Optional<Nametag> optionalNametag = Optional.ofNullable(nametags.get(role));
-        optionalNametag.ifPresent(nametag -> dispatchGroupChangePacket(plugin, tabPlayer, role, nametag));
+        optionalNametag.ifPresent(nametag -> dispatchGroupChangePacket(plugin, tabPlayer, role, nametag, false));
     }
 
     public void resendAllTeams(@NotNull TabPlayer tabPlayer) {
@@ -308,8 +308,8 @@ public class ScoreboardManager {
     }
 
     private void dispatchGroupChangePacket(@NotNull Velocitab plugin, @NotNull TabPlayer tabPlayer,
-                                           @NotNull String teamName,
-                                           @NotNull Nametag nametag) {
+                                           @NotNull String teamName, @NotNull Nametag nametag,
+                                           boolean force) {
         if (!teams) {
             return;
         }
@@ -334,9 +334,10 @@ public class ScoreboardManager {
             final Component suffix = packet.suffix();
             final Optional<Component[]> cached = tabPlayer.getRelationalNametag(viewer.getPlayer().getUniqueId());
             // Skip if the nametag is the same as the cached one
-            if (cached.isPresent() && cached.get()[0].equals(prefix) && cached.get()[1].equals(suffix)) {
+            if (!force && cached.isPresent() && cached.get()[0].equals(prefix) && cached.get()[1].equals(suffix)) {
                 return;
             }
+
             tabPlayer.setRelationalNametag(viewer.getPlayer().getUniqueId(), prefix, suffix);
             sendPacket(viewer.getPlayer(), packet, isNameTagEmpty);
         });
@@ -422,7 +423,8 @@ public class ScoreboardManager {
                     .mapping(0x5E, MINECRAFT_1_20_3, false)
                     .mapping(0x60, MINECRAFT_1_20_5, false)
                     .mapping(0x67, MINECRAFT_1_21_2, false)
-                    .mapping(0x66, MINECRAFT_1_21_5, false);
+                    .mapping(0x66, MINECRAFT_1_21_5, false)
+                    .mapping(0x6B, MINECRAFT_1_21_9, false);
             packetRegistration.register();
         } catch (Throwable e) {
             plugin.log(Level.ERROR, "Failed to register UpdateTeamsPacket", e);

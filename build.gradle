@@ -2,9 +2,9 @@ import org.apache.tools.ant.filters.ReplaceTokens
 
 plugins {
     id 'xyz.jpenilla.run-velocity' version '2.3.1'
-    id 'com.gradleup.shadow' version '8.3.6'
+    id 'com.gradleup.shadow' version '8.3.8'
     id 'org.cadixdev.licenser' version '0.6.1'
-    id 'org.ajoberstar.grgit' version '5.3.0'
+    id 'org.ajoberstar.grgit' version '5.3.2'
     id 'maven-publish'
     id 'java'
 }
@@ -25,10 +25,10 @@ ext {
 
 repositories {
     mavenCentral()
+    maven { url = 'https://repo.papermc.io/repository/maven-public/' }
     maven { url = 'https://repo.william278.net/velocity/' }
     maven { url = 'https://repo.william278.net/releases/' }
     maven { url = 'https://repo.william278.net/snapshots/' }
-    maven { url = 'https://repo.papermc.io/repository/maven-public/' }
     maven { url = 'https://repo.minebench.de/' }
     maven { url = 'https://jitpack.io' }
 }
@@ -41,9 +41,9 @@ dependencies {
     compileOnly 'io.netty:netty-codec-http:4.2.2.Final'
     compileOnly 'org.projectlombok:lombok:1.18.38'
     compileOnly 'net.luckperms:api:5.5'
-    compileOnly 'io.github.miniplaceholders:miniplaceholders-api:2.2.3'
-    compileOnly 'it.unimi.dsi:fastutil:8.5.15'
-    compileOnly 'net.kyori:adventure-nbt:4.21.0'
+    compileOnly 'io.github.miniplaceholders:miniplaceholders-api:3.0.1'
+    compileOnly 'it.unimi.dsi:fastutil:8.5.16'
+    compileOnly 'net.kyori:adventure-nbt:4.23.0'
 
     implementation 'org.apache.commons:commons-text:1.13.1'
     implementation 'net.william278:desertwell:2.0.4'
@@ -52,17 +52,25 @@ dependencies {
     implementation 'de.exlll:configlib-yaml:4.6.1'
     implementation 'org.mvel:mvel2:2.5.2.Final'
     implementation 'net.jodah:expiringmap:0.5.11'
-    implementation 'net.william278.toilet:toilet-velocity:1.0.12'
+    implementation 'net.william278.toilet:toilet-velocity:1.0.14'
 
     annotationProcessor 'org.projectlombok:lombok:1.18.38'
 }
 
 processResources {
-    def tokenMap = rootProject.ext.properties
-    tokenMap.merge("grgit",'',(s, s2) -> s)
+    def tokenMap = [:]
+    rootProject.ext.properties.each { key, value ->
+        if (value != null) {
+            tokenMap[key] = value.toString()
+        }
+    }
+
     filesMatching(['**/*.json', '**/*.yml']) {
-        filter ReplaceTokens as Class, beginToken: '${', endToken: '}',
-                tokens: tokenMap
+        filter(ReplaceTokens,
+                'beginToken': '${',
+                'endToken'  : '}',
+                'tokens'    : tokenMap
+        )
     }
 }
 
@@ -169,7 +177,7 @@ tasks {
 
         downloadPlugins {
 //            github ("WiIIiam278", "PAPIProxyBridge", "1.7.1", "PAPIProxyBridge-Velocity-1.7.1.jar")
-            modrinth ("miniplaceholders", "2.2.4")
+            modrinth ("miniplaceholders", "3.0.1")
         }
     }
 }
